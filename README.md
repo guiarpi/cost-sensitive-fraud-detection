@@ -1,91 +1,96 @@
-# Fraud-Detection
-In this project, there are 3 pieces of code related to Fraud Detection:
+# Fraud Detection System
 
-1) Stored Procedure for Fraud Detection in PostgreSQL 
-2) Machine Learning-Based Fraud Detection PostgreSQL + Python
-3) Automate Fraud Reports sending email alerts automatically
+A three-part fraud detection pipeline built in PostgreSQL and Python, progressing from rule-based detection to a machine learning model with automated reporting and email alerts.
 
-## 1. Creating a Stored Procedure for Fraud Detection in PostgreSQL (running in Python)
-### Step 1: Connecting to PostgreSQL in Jupter notebook
-    Installing ipython-sql package,
-    Connecting to the default database,
-    Connecting to the PostgreSQL server,
-    Creating the new database,
-    Connecting to the new database using ipython-sql.
-    
-### Step 2: Create a Fraud Detection Table
-    Creating the schema and table,
-    Inserting Sample Transactions.
+## The problem
 
-### Step 3: Identify Suspicious Transactions
-    Rule-Based Fraud Detection Look for high-value transactions,
-    Multiple Transactions in a Short Time (Velocity Check),
-    Location Anomaly Detection Find customers who made transactions from different locations within 1 hour.
+Rule-based fraud detection catches known patterns but misses emerging ones. ML models catch more, but lack explainability for operational teams. This project combines both: rules for high-confidence, fast flagging — ML to surface anomalies the rules miss — and automated reporting to close the loop.
 
-### Step 4: Mark Fraudulent Transactions
-    Updating the table to flag suspicious transactions.
+## What's in this repo
 
-### Step 5: Automate Fraud Detection with a Stored Procedure
-    Creating a Stored Procedure to automate fraud detection
+| Notebook | What it does |
+|---|---|
+| `Fraud Detection - Stored Procedure.ipynb` | Rule-based detection via PostgreSQL stored procedures: velocity checks, high-value transaction flags, location anomaly detection |
+| `Fraud Detection - Machine Learning.ipynb` | Random Forest classifier trained on transaction features, predictions written back to PostgreSQL |
+| `Fraud Detection - Automating Fraud Reports.ipynb` | Automated fraud report generation + email alerts triggered by a cron job when fraud rate exceeds threshold |
 
+## Approach
 
-## 2. Machine Learning-Based Fraud Detection
-### Step 1: Connecting to PostgreSQL
-    Importing create_engine and pandas libraries
-    Using connect_db() to connect to PostgreSQL
-    
-### Step 2: Load Data from PostgreSQL
-    Using load_data() and querying SQL via Python syntax instead of using %load_ext sql
+**Stage 1 — Rule-based detection (Stored Procedure)**
 
-### Step 3: Train Fraud Detection Model
-    Setting the features
-    Splitting the data into test and training sets
-    Fitting the model
-    Checking accurary
+Three rule types flagging transactions as suspicious:
+- **High-value threshold** — transactions exceeding a defined amount ceiling
+- **Velocity check** — multiple transactions from the same customer within a short window
+- **Location anomaly** — transactions from geographically distant locations within 1 hour (self-join on timestamp + location delta)
 
-### Step 4: Predict Fraud for New Transactions and Store in PostgreSQL
-    Creating a function to update database 
-    Running the fraud detection pipeline
+Suspicious transactions are written to a `fraud_flags` table and a stored procedure automates the detection run.
 
-### Step 5: Automate Fraud Detection with a Stored Procedure
-    Creating a Stored Procedure to automate fraud detection
+**Stage 2 — Machine Learning layer**
 
-## 2. Automating Fraud Reports
-### Step 1: Loading PostgreSQL 
-    Installing ipython-sql package,
-    Connecting to the default database,
-    Connecting to the PostgreSQL server,
-    Creating the new database,
-    Connecting to the new database using ipython-sql.
-    
-### Step 2: Create a Transactions Table 
-    Using CREATE TABLE IF NOT EXIST clause
+A Random Forest classifier trained on engineered transaction features to catch patterns the rules miss. Features include transaction amount, time-of-day, velocity metrics, and location delta. Predictions are stored back in PostgreSQL alongside the rule-based flags.
 
-### Step 3: Self-Join Query to Detect Suspicious Transactions
-    Using self-joins the transactions table to find cases where a customer made transactions in different locations within a short time (1 hour)
+> Model performance: **[fill in your accuracy / precision / recall / F1 here]**  
+> Training/test split: 80/20 · Class imbalance handled via **[SMOTE / class_weight — fill in]**
 
-### Step 4: Create Fraud Features Table
-    Using subquery 
+**Stage 3 — Automated reporting**
 
-### Step 5: Create Fraud Reports Table
-    Using CREATE TABLE IF NOT EXIST clause
+A stored procedure calculates fraud rate per reporting period. A cron job runs it on a schedule and fires email alerts when the fraud percentage exceeds 10%, giving operations teams a live signal without manual querying.
 
-### Step 6: Create a Stored Procedure to Generate Fraud Reports
-    Using CREATE OR REPLACE FUNCTION clause
-    Getting total transactions
-    Getting total fraudulent transactions
-    Calculating fraud percentage using IF ELSE clause
+## Key findings
 
-### Step 7: Automate Fraud Report Generation with Cron Job
-    This step to be followed on Terminal (on Mac)
+> *(Fill these in from your actual notebook results — this is the most important section for a portfolio)*
+>
+> Example structure:
+> - X% of transactions flagged by rule-based detection; Y% confirmed fraudulent on review
+> - ML model improved recall by Z% over rules alone, catching [pattern type] the rules missed
+> - Location anomaly rule was the highest-precision signal (low false positive rate)
+> - Velocity check generated the most flags but also the most false positives — threshold tuning needed
 
-### Step 8: Create Fraud Alerts Table
-    Using CREATE TABLE IF NOT EXISTS clause 
+## Setup
 
-### Step 9: Create a Stored Procedure to Generate Fraud Alerts
-    Using CREATE OR REPLACE FUNCTION clause
-    Getting latest fraud percentage
-    Inserting an alert if fraud exceeds 10% using IF clause
+**Requirements**
+```
+Python 3.10+
+PostgreSQL 14+
+```
 
-### Step 10: Automate Fraud Alerts with Cron Job
-    This step to be followed on Terminal (on Mac)
+**Install dependencies**
+```bash
+pip install -r requirements.txt
+```
+
+**Database setup**
+
+The notebooks create all required tables and schemas. Connect your PostgreSQL instance at the top of each notebook:
+```python
+DB_URL = "postgresql://user:password@localhost:5432/fraud_db"
+```
+
+**Run order**
+1. `Fraud Detection - Stored Procedure.ipynb` — sets up tables and rule-based detection
+2. `Fraud Detection - Machine Learning.ipynb` — trains model and adds ML predictions
+3. `Fraud Detection - Automating Fraud Reports.ipynb` — sets up reporting + alerts
+
+## Requirements
+
+```
+psycopg2-binary
+sqlalchemy
+pandas
+scikit-learn
+ipython-sql
+```
+
+*(Add a `requirements.txt` to the repo root with these pinned versions)*
+
+## What I'd do next
+
+- **Threshold optimisation** — tune the velocity and high-value thresholds using precision/recall trade-off curves rather than fixed values
+- **SHAP values** — add feature importance explainability so operations teams understand *why* a transaction was flagged
+- **Real-time scoring** — wrap the ML model in a FastAPI endpoint for live transaction scoring instead of batch runs
+- **Drift monitoring** — detect when the fraud pattern shifts so the model can be retriggered for retraining
+
+## Related projects
+
+- [Customer Churn Prediction](https://github.com/guiarpi/customer-churn-prediction) — similar ML pipeline applied to retention
+- [Data Quality AI Framework](https://github.com/guiarpi/data-quality-ai-framework) — anomaly detection with LLM reasoning layer
