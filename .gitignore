@@ -1,0 +1,40 @@
+# Dataset (too large for GitHub — download from Kaggle)
+creditcard.csv
+*.csv
+
+# Database credentials
+db_config.py
+.env
+config.py
+
+# Kaggle credentials — never commit this
+kaggle.json
+
+# Notebook outputs (keep code, strip outputs before committing)
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Generated plots (reproducible from notebooks)
+plots/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
