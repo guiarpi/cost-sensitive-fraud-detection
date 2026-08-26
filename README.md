@@ -32,14 +32,46 @@ This project demonstrates three complementary approaches to that problem, each a
 
 ## Key Results
 
-| Model | Precision (Fraud) | Recall (Fraud) | ROC-AUC |
-|---|---|---|---|
-| Logistic Regression (balanced) | ~0.06 | ~0.92 | ~0.97 |
-| Random Forest (balanced) | ~0.87 | ~0.82 | ~0.98 |
+All figures below are from an actual run over the full 284,807-transaction dataset
+(56,962-row stratified holdout containing 98 frauds).
 
-**Why recall matters more than accuracy here:** a model that predicts "not fraud" for all 284,807 transactions scores 99.83% accuracy — and catches zero fraud. Recall (the share of actual frauds caught) is the primary business metric. The Random Forest trades some recall for much higher precision, meaning far fewer false positives sent to the fraud operations team.
+### Rule-based layer
 
-*Exact figures vary by run. Full evaluation in `02-machine-learning.ipynb`.*
+| Rule | Flagged | Caught | Precision | Recall | Lift vs 0.173% base |
+|---|---|---|---|---|---|
+| Anomalous features (`V14 < -5 OR V4 > 5 OR V12 < -5`) | 1,087 | 359 | **33.0%** | **73.0%** | **191×** |
+| High value (`Amount > €365`, 95th pct) | 14,232 | 43 | 0.30% | 8.7% | 1.7× |
+| Velocity (two transactions within 60s) | 269,698 | 113 | 0.04% | 23.0% | 0.2× |
+
+Three SQL conditions catch 73% of all fraud at 1-in-3 precision. The velocity rule
+flags 95% of the dataset at *worse than random* precision — kept in the repo as a
+documented negative result, because the dataset is anonymised and has no customer
+identifier to compute velocity against.
+
+### Machine learning layer
+
+| Model | Precision (Fraud) | Recall (Fraud) | F1 | ROC-AUC |
+|---|---|---|---|---|
+| Logistic Regression (balanced) | 0.061 | 0.918 | 0.114 | **0.972** |
+| Random Forest (balanced) | **0.961** | 0.745 | **0.839** | 0.953 |
+| Random Forest @ tuned threshold 0.26 | 0.932 | **0.837** | — | — |
+
+**The headline finding is the ROC-AUC trap.** Logistic Regression scores the *higher*
+ROC-AUC (0.972 vs 0.953) and is decisively the worse model — 6% precision means 15
+false alarms for every genuine fraud. ROC-AUC's false-positive-rate axis is diluted by
+a negative class 578× larger than the positive one, so it flatters models that
+over-flag. The precision–recall curve and F1 (0.84 vs 0.11) rank them correctly.
+
+**Threshold tuning matters.** Moving the cutoff from the default 0.5 to 0.26 bought
++8.2 points of recall for −2.9 points of precision — catching 8 more frauds per 98 at
+the cost of a handful of extra reviews. The default 0.5 is an arbitrary inheritance,
+not a decision.
+
+**Does ML earn its complexity here?** Yes, decisively: 93% precision at 84% recall
+versus the best rule's 33% at 73%. An analyst reviewing the model's queue finds fraud
+in 9 cases out of 10; reviewing the rule's queue, 1 in 3.
+
+*Reproduce: run the notebooks in order. Full evaluation in `02-machine-learning.ipynb`.*
 
 ---
 
