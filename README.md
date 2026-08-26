@@ -1,20 +1,57 @@
 # Fraud Detection System — PostgreSQL + Python + Machine Learning
 
-An end-to-end fraud detection pipeline combining rule-based detection, machine learning, and automated reporting — built on 284,807 real transactions from the Kaggle Credit Card Fraud dataset.
+An end-to-end fraud detection pipeline built on 284,807 real transactions — rule-based
+detection, machine learning, cost-sensitive optimisation and explainability, with every
+decision priced in euros rather than argued in F1 points.
+
+**[→ Read the findings](FINDINGS.md)**
 
 ---
 
 ## The Problem
 
-Credit card fraud costs the global financial industry over $30 billion annually. The core challenge isn't just building a model — it's navigating the **precision-recall trade-off**: flagging too much legitimate activity frustrates customers and creates operational overhead, while missing actual fraud causes direct financial loss.
+Fraud detection is a cost-optimisation problem disguised as a classification problem.
+Catching more fraud is trivial — flag everything. The difficulty is catching fraud
+without burying an operations team in false positives.
 
-This project demonstrates three complementary approaches to that problem, each adding a layer the previous one can't handle alone:
+Most treatments stop at "the model scores 0.98 ROC-AUC." This project asks the questions
+that come after: *what does a missed fraud actually cost, what does a false alarm cost,
+what threshold follows from that, and does any of it survive contact with time?*
 
-| Stage | Approach | Why |
+| Stage | Approach | What it adds |
 |---|---|---|
-| 1 | **Rule-based detection** | Fast, explainable, zero false negatives for known patterns |
-| 2 | **Machine learning** | Catches subtle patterns rules can't articulate |
-| 3 | **Automated reporting** | Surfaces fraud trends and alerts without manual intervention |
+| 1 | Rule-based detection | Fast, explainable, auditable — and measurable |
+| 2 | Machine learning | Catches patterns nobody wrote down |
+| 3 | Automated reporting | Trends and alerts without manual querying |
+| 4 | Cost optimisation | Replaces F1 with expected cost in euros |
+| 5 | Temporal validation | Removes lookahead leakage; exposes threshold drift |
+| 6 | Rule optimisation | Prices each rule; retires the ones that destroy value |
+| 7 | Explainability | Makes the model as reviewable as the rules |
+
+---
+
+## Headline Results
+
+| Approach | Flagged | Fraud caught | Cost per 57k transactions |
+|---|---|---|---|
+| Do nothing | 0 | 0% | €10,645 |
+| Original three rules | **100%** | 100% | **€170,886** |
+| Tuned rule (anomaly only) | 1.3% | 89% | €3,532 |
+| Model at default threshold 0.50 | 0.14% | 76% | €4,719 |
+| **Model at cost-optimal threshold 0.125** | **0.19%** | **89%** | **€2,151** |
+
+Three findings worth the click:
+
+- **A naive rule system cost 14× more than switching it off.** The velocity rule flagged
+  every transaction in the dataset at precision exactly equal to the base rate — zero
+  information. It fails structurally: anonymised data has no customer identifier, so
+  there is no entity to compute velocity against.
+- **The model with the better ROC-AUC was the worse model.** Logistic Regression scored
+  0.972 against Random Forest's 0.953, at 6% precision versus 96%. Under 578:1 imbalance
+  ROC-AUC flatters over-flagging.
+- **The model generalises across time; the threshold does not.** F1 moved 0.811 → 0.802
+  under temporal validation, but the cost-optimal threshold moved 0.375 → 0.055 — leaving
+  a deployed system 78% above achievable cost.
 
 ---
 
@@ -80,13 +117,22 @@ in 9 cases out of 10; reviewing the rule's queue, 1 in 3.
 ```
 fraud-detection/
 ├── 00-eda.ipynb                  # Exploratory analysis & visualisations
-├── 01-stored-procedure.ipynb     # Rule-based detection with PostgreSQL stored procedures
-├── 02-machine-learning.ipynb     # Logistic Regression vs. Random Forest with full evaluation
-├── 03-automated-reports.ipynb    # Fraud reports, alerts, and cron job automation
+├── 01-stored-procedure.ipynb     # Rule-based detection via PostgreSQL stored procedures
+├── 02-machine-learning.ipynb     # Logistic Regression vs Random Forest, full evaluation
+├── 03-automated-reports.ipynb    # Fraud reports, alerts, cron scheduling
+├── 04-cost-optimisation.ipynb    # Expected-cost thresholds, alert budget, precision@k
+├── 05-temporal-validation.ipynb  # Time-ordered split; deployment simulation
+├── 06-rule-optimisation.ipynb    # Rules priced in euros; marginal selection
+├── 07-explainability.ipynb       # SHAP attribution; analyst-facing alert queue
+├── FINDINGS.md                   # Stakeholder-facing summary, no code
+├── EXPANSION-PLAN.md             # Roadmap for the analytical deepening above
 ├── plots/                        # Generated visualisation outputs
 ├── requirements.txt
 └── .gitignore
 ```
+
+Run in numerical order — `01` populates the PostgreSQL tables that `03` and `06` read.
+Notebooks `04`, `05` and `07` are self-contained and retrain independently.
 
 ---
 
@@ -118,8 +164,35 @@ Results written to a `flagged_transactions` table. A stored procedure automates 
 ### `03-automated-reports.ipynb` — Reporting & Alerts
 - Self-join SQL to detect suspicious transaction sequences
 - Stored procedure for automated fraud rate calculation per reporting period
-- Alert logic: triggers when fraud rate exceeds configurable threshold (default 10%)
+- Alert logic: triggers when fraud rate exceeds configurable threshold
 - Cron job setup for scheduled execution
+- **Query optimisation:** the original self-join used `ABS(t2.Time - t1.Time) < 30`,
+  which is non-sargable — the planner cannot index it, degenerating into ~40.5 billion
+  pair comparisons. Rewritten as an indexable `BETWEEN` range: **2h09m unfinished → 2.6s**
+
+### `04-cost-optimisation.ipynb` — Cost-Sensitive Thresholds
+- Explicit cost model: each false negative weighted by its *actual* transaction value
+- Threshold chosen by minimising expected cost rather than maximising F1
+- Sensitivity analysis across a 20× range of the one assumed input
+- Precision@k / alert budget — reframes the model as a staffing decision
+
+### `05-temporal-validation.ipynb` — Honest Evaluation
+- Time-ordered split replacing the random one, removing lookahead leakage
+- Deployment simulation: tune on the past, apply unchanged to the future
+- Quantifies the gap against a hindsight-optimal threshold
+
+### `06-rule-optimisation.ipynb` — Pricing the Rules
+- Every rule valued in euros against a "do nothing" baseline
+- Velocity rule retired with evidence — swept across windows from 1s to 300s
+- Cutoffs re-tuned against cost instead of round numbers
+- Greedy forward selection on marginal contribution, not standalone value
+- Rules vs model head-to-head on identical terms
+
+### `07-explainability.ipynb` — SHAP
+- Global and per-prediction feature attribution
+- Cross-validates the hand-built rule: SHAP ranks V14, V12, V4 as its **top three**,
+  arrived at independently of the EDA that chose them
+- Analyst-facing alert queue with plain-language flag reasons
 
 ---
 
@@ -180,21 +253,30 @@ engine = create_engine('postgresql://postgres:YOUR_PASSWORD@localhost:5432/fraud
 
 | Area | Specifics |
 |---|---|
-| **SQL** | Stored procedures, self-joins, window functions, CTEs, PostgreSQL |
-| **Python** | pandas, scikit-learn, SQLAlchemy, matplotlib, seaborn |
-| **Machine Learning** | Classification, class imbalance handling, model evaluation, threshold tuning |
-| **Data Engineering** | PostgreSQL integration, automated pipelines, cron job scheduling |
-| **Data Analysis** | EDA, visualisation, business framing of model trade-offs |
+| **SQL** | Stored procedures, self-joins, CTEs, indexing, query-plan reasoning (sargability) |
+| **Python** | pandas, scikit-learn, SHAP, SQLAlchemy, matplotlib, seaborn |
+| **Machine Learning** | Class imbalance, threshold tuning, cost-sensitive evaluation, explainability |
+| **Data Engineering** | PostgreSQL integration, automated pipelines, scheduled execution |
+| **Data Analysis** | EDA, visualisation, expected-value modelling, sensitivity analysis |
+| **Judgement** | Negative results reported; assumptions stated; marginal vs standalone value |
 
 ---
 
 ## What I'd Do Next
 
-- **Concept drift monitoring** — fraud patterns shift over time; add a rolling retrain trigger when model performance degrades
-- **SHAP explainability** — feature contributions per transaction so fraud analysts understand *why* the model flagged something
-- **XGBoost / LightGBM** — likely to outperform Random Forest on this tabular dataset
-- **Airflow orchestration** — replace cron with a proper DAG for dependency management and alerting
-- **FastAPI scoring endpoint** — wrap the trained model for real-time transaction scoring instead of batch runs
+Ordered by expected value, not by novelty:
+
+- **Scheduled threshold recalibration** — the largest measured loss in the system. The
+  deployed threshold sat 78% above achievable cost after a single period of drift.
+- **Extend the anomaly rule with V11, V3, V10** — SHAP-identified, currently unused
+- **Measure the real analyst review cost** to replace the single assumed input
+- **Walk-forward validation** — confidence intervals rather than a point estimate from
+  one train/test cut
+- **Second-order costs** — churn from false declines, chargeback fees, regulatory
+  exposure. All raise the cost of a false positive and would move the optimum.
+- **XGBoost / LightGBM** — likely marginal at 96% precision, but worth measuring
+- **Airflow orchestration** — cron has no dependency management, retries or failure
+  visibility
 
 ---
 
