@@ -125,7 +125,6 @@ cost-sensitive-fraud-detection/
 ├── 06-rule-optimisation.ipynb    # Rules priced in euros; marginal selection
 ├── 07-explainability.ipynb       # SHAP attribution; analyst-facing alert queue
 ├── FINDINGS.md                   # Stakeholder-facing summary, no code
-├── EXPANSION-PLAN.md             # Roadmap for the analytical deepening above
 ├── plots/                        # Generated visualisation outputs
 ├── requirements.txt
 └── .gitignore
