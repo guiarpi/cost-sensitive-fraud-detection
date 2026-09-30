@@ -115,7 +115,7 @@ in 9 cases out of 10; reviewing the rule's queue, 1 in 3.
 ## Project Structure
 
 ```
-fraud-detection/
+cost-sensitive-fraud-detection/
 ├── 00-eda.ipynb                  # Exploratory analysis & visualisations
 ├── 01-stored-procedure.ipynb     # Rule-based detection via PostgreSQL stored procedures
 ├── 02-machine-learning.ipynb     # Logistic Regression vs Random Forest, full evaluation
@@ -218,8 +218,8 @@ chmod 600 ~/.kaggle/kaggle.json
 ### 2. Install dependencies
 
 ```bash
-git clone https://github.com/guiarpi/Fraud-Detection.git
-cd Fraud-Detection
+git clone https://github.com/guiarpi/cost-sensitive-fraud-detection.git
+cd cost-sensitive-fraud-detection
 
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
